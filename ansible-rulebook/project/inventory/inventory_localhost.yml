@@ -1,0 +1,10 @@
+# inventory_localhost.yml
+# ローカルホスト（localhost）を明示的に定義
+
+localhost_group:
+  hosts:
+    localhost:
+      ansible_connection: local
+      ansible_host: 127.0.0.1
+      ansible_python_interpreter: /usr/local/bin/python3
+      

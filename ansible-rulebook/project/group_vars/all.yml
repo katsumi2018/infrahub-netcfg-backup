@@ -1,0 +1,42 @@
+# 全 Playbook で共通して使う変数定義
+
+# Ansible 実行時に操作対象を切り替えるためのパラメータ（デフォルトは空文字列）
+effective_target: "{{ target_host | default('') }}"
+
+# デバイスへのログインに使う IP アドレスを primary_ip から抽出
+login_ip: "{{ primary_ip.split('/') | first }}"
+ansible_host: "{{ login_ip }}"   # Ansible が接続に使うホスト名/IP
+
+# 設定ファイルの一時保存ディレクトリ
+config_dir: "/tmp/config"
+
+# Git 関連設定
+git_server: gitea   # Gitea サーバーのホスト名または IP
+repo_path: "/tmp/repos"      # ローカルにクローンするリポジトリのパス
+remote_url: "http://{{ git_server }}:3000/root/network-automation-config.git"  # リモートリポジトリの URL
+
+# Git コミット設定
+commit_message: "Upload configuration files"  # コミット時のメッセージ
+branch: "main"                                # プッシュ先ブランチ名
+
+# HTTP 認証情報（Gitea へのアクセスや他 API 呼び出しに利用）
+http_user:     "root"       # HTTP Basic 認証ユーザー名
+http_password: "root12345"  # HTTP Basic 認証パスワード
+
+# プラットフォーム別に Ansible 接続情報をまとめたマッピング
+platform_creds:
+  eos:    # Arista EOS
+    ansible_user: admin                       # 接続ユーザー名
+    ansible_password: admin12345              # 接続パスワード
+    ansible_connection: network_cli           # 接続方式
+    ansible_network_os: arista.eos.eos        # ネットワーク OS モジュール
+  junos:  # Junos OS （Junos CLI/Netconf）
+    ansible_user: admin
+    ansible_password: admin12345
+    ansible_connection: network_cli
+    ansible_network_os: junipernetworks.junos.junos
+  vyos:   # VyOS
+    ansible_user: vyos
+    ansible_password: vyos
+    ansible_connection: network_cli
+    ansible_network_os: vyos.vyos.vyos

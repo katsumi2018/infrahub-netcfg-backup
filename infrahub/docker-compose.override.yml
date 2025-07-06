@@ -1,0 +1,42 @@
+x-infrahub-config: &infrahub_config
+  INFRAHUB_STORAGE_USE_SSL: ${INFRAHUB_STORAGE_USE_SSL:-false}  # HTTP 接続を許容するため、false に変更
+  
+services:
+  message-queue:
+    restart: "no"       # サーバー起動時に自動起動させない、元のファイル「unless-stopped」(自動的にコンテナ)
+    networks:
+      - inflahub_net    # 他のコンテナと同じ共有ネットワーク「inflahub_net」を使用
+
+  cache:
+    restart: "no"
+    networks:
+      - inflahub_net
+
+  database:
+    restart: "no"
+    networks:
+      - inflahub_net
+
+  task-manager:
+    restart: "no"
+    networks:
+      - inflahub_net
+
+  task-manager-db:
+    restart: "no"
+    networks:
+      - inflahub_net
+
+  infrahub-server:
+    restart: "no"
+    networks:
+      - inflahub_net
+
+  task-worker:
+    restart: "no"
+    networks:
+      - inflahub_net
+      
+networks:
+  inflahub_net:       # 他のコンテナと同じ共有ネットワーク「inflahub_net」を使用
+    external: true    # 新規に inflahub_net を作成せずに、事前につくった inflahub_net を利用

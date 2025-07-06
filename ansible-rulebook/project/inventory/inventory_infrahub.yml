@@ -1,0 +1,26 @@
+# infrahub_inventory.yml
+# InfraHub から取ってくる動的インベントリ
+
+plugin: opsmill.infrahub.inventory
+validate_certs: false
+
+nodes:
+  InfraDevice:
+    filters:
+      status__value: "active"
+    include:
+      - name
+      - status
+      - primary_address.address
+      - platform.ansible_network_os
+
+compose:
+  primary_ip: primary_address.address
+  ansible_host: "{{ primary_ip.split('/') | first }}"
+  ansible_device_name: name
+  status: status
+  platform: platform.ansible_network_os
+
+groups:
+  infrahub_group: "True"
+  

@@ -1,0 +1,21 @@
+services:
+  gitea:
+    image: docker.gitea.com/gitea:1.24.2   # Gitea の公式イメージ
+    container_name: gitea                  # コンテナ名を固定
+    environment:
+      - USER_UID=1000                      # ホスト側ユーザーID
+      - USER_GID=1000                      # ホスト側グループID
+    #restart: always                       # 常に再起動（必要時コメントを外す）
+    volumes:
+      - ./gitea:/data                      # Gitea データ永続化先
+      - /etc/timezone:/etc/timezone:ro     # タイムゾーン設定を同期
+      - /etc/localtime:/etc/localtime:ro   # ローカル時刻を同期
+    ports:
+      - "3000:3000"                        # Web UI（HTTP）ポート
+      - "222:22"                           # SSH ポートマッピング
+    networks:
+      - inflahub_net    # 他のコンテナと同じ共有ネットワーク「inflahub_net」を使用
+      
+networks:
+  inflahub_net:       # 他のコンテナと同じ共有ネットワーク「inflahub_net」を使用
+    external: true    # 新規に inflahub_net を作成せずに、事前につくった inflahub_net を利用

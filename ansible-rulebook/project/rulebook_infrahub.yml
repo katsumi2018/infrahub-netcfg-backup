@@ -1,0 +1,19 @@
+---
+- name: infrahub rulebook       # ルールブック名
+  hosts: all                    # コントローラー全体
+
+  sources:
+    - ansible.eda.webhook:      # Webhook 受信設定
+        host: 0.0.0.0           # 全インターフェース
+        port: 5000              # ポート番号
+
+  rules:
+    - name: Device Config Backup  # ルール名
+      condition: true             # 常に実行
+      action:
+        run_playbook:             # Playbook 実行
+          name: /ansible-rulebook/project/playbook_infrahub.yml   # Playbook パス
+                                     
+          extra_vars:
+            target_host: "{{ event.payload.message }}"  # 受信メッセージをホスト名に
+                                    

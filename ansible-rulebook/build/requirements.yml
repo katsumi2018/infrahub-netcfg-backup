@@ -1,0 +1,9 @@
+collections:
+  - name: opsmill.infrahub     # InfraHub の API 呼び出しと動的インベントリ取得を提供
+  - name: arista.eos           # Arista EOS 向けモジュール一式
+  - name: juniper.device       # Junos OS（gNMI／REST API）操作用モジュール
+  - name: junipernetworks.junos # Junos OS（Netconf／CLI）操作用モジュール
+  - name: vyos.vyos            # VyOS 向けモジュール一式
+  - name: ansible.utils        # Ansible 標準ユーティリティモジュール群
+  - name: ansible.eda          # イベント駆動型自動化（EDA）用モジュールコレクション
+

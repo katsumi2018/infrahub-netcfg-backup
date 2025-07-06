@@ -1,0 +1,241 @@
+---
+- name: コンフィグ取得とアーティファクト生成  # すべてのネットワーク機器で実行
+  hosts: infrahub_group
+  gather_facts: false
+  tasks:
+#--------------------------------------------------------------------------------------
+# STEP1 : ネットワーク機器のバックアップ処理
+#--------------------------------------------------------------------------------------
+    - name: 認証情報をセット       # 各プラットフォームごとの接続設定
+      set_fact:
+        ansible_user:       "{{ platform_creds[platform].ansible_user }}"
+        ansible_password:   "{{ platform_creds[platform].ansible_password }}"
+        ansible_connection: "{{ platform_creds[platform].ansible_connection }}"
+        ansible_network_os: "{{ platform_creds[platform].ansible_network_os }}"
+      when:
+        - platform in platform_creds.keys()
+        - effective_target == 'all-backup' or inventory_hostname == effective_target
+
+    - name: Arista 設定取得         # eos の running-config
+      arista.eos.eos_command:
+        commands: show running-config
+      register: eos_config
+      when:
+        - platform == 'eos'
+        - effective_target == 'all-backup' or inventory_hostname == effective_target
+
+    - name: Junos 設定取得          # junos の set 表示
+      junipernetworks.junos.junos_command:
+        commands: show configuration | display set
+      register: junos_config
+      when:
+        - platform == 'junos'
+        - effective_target == 'all-backup' or inventory_hostname == effective_target
+
+    - name: VyOS 設定取得           # vyos のコマンド形式
+      vyos.vyos.vyos_command:
+        commands: show configuration commands
+      register: vyos_config
+      when:
+        - platform == 'vyos'
+        - effective_target == 'all-backup' or inventory_hostname == effective_target
+
+    - name: コンフィグをファイル保存  # stdout[0] には全設定が含まれる
+      copy:
+        content: >-
+          {%- if platform == 'eos' -%}
+          {{ eos_config.stdout[0] }}
+          {%- elif platform == 'junos' -%}
+          {{ junos_config.stdout[0] }}
+          {%- elif platform == 'vyos' -%}
+          {{ vyos_config.stdout[0] }}
+          {%- endif -%}
+        dest: "{{ config_dir }}/{{ ansible_device_name }}.txt"
+      when:
+        - platform in ['eos', 'junos', 'vyos']
+        - effective_target == 'all-backup' or inventory_hostname == effective_target
+
+- name: Git準備（ローカル）      # localhost_group で実行
+  hosts: localhost_group
+  connection: local
+  gather_facts: false
+  tasks:
+#--------------------------------------------------------------------------------------
+# STEP2 : 取得したコンフィグをGitリポジトリに反映
+#--------------------------------------------------------------------------------------
+    - name: .netrc を作成           # HTTP Basic 認証用
+      ansible.builtin.copy:
+        dest: "{{ lookup('env','HOME') }}/.netrc"
+        content: |
+          machine {{ git_server }}
+          login {{ http_user }}
+          password {{ http_password }}
+        mode: '0600'
+
+    - name: リポジトリ初期化判定     # .git フォルダの有無
+      ansible.builtin.stat:
+        path: "{{ repo_path }}/.git"
+      register: git_dir
+
+    - name: Git リポジトリ初期化      # 存在しなければ init
+      ansible.builtin.command:
+        cmd: git init
+        chdir: "{{ repo_path }}"
+      when: not git_dir.stat.exists
+
+    - name: origin を追加            # 初回のみ設定
+      ansible.builtin.command:
+        cmd: git remote add origin "{{ remote_url }}"
+        chdir: "{{ repo_path }}"
+      when: not git_dir.stat.exists
+
+    - name: origin からフェッチ       # 最新コミット取得
+      ansible.builtin.command:
+        cmd: git fetch origin
+        chdir: "{{ repo_path }}"
+
+    - name: ブランチをチェックアウト  # 作業ブランチに切替
+      ansible.builtin.command:
+        cmd: git checkout "{{ branch }}"
+        chdir: "{{ repo_path }}"
+
+- name: コンフィグ配布             # infrahub_group で再度実行
+  hosts: infrahub_group
+  gather_facts: false
+  tasks:
+    - name: コンフィグをリポジトリへコピー
+      ansible.builtin.copy:
+        src: "{{ config_dir }}/{{ ansible_device_name }}.txt"
+        dest: "{{ repo_path }}/config/{{ ansible_device_name }}.txt"
+      when:
+        - effective_target == 'all-backup' or inventory_hostname == effective_target
+
+- name: Git同期＆SHA取得（ローカル） # localhost_group で実行
+  hosts: localhost_group
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: 変更をステージ
+      ansible.builtin.command:
+        cmd: git add -A
+        chdir: "{{ repo_path }}"
+
+    - name: Gitユーザ設定            # コミット用 user.name と user.email
+      ansible.builtin.command:
+        cmd: git config user.name "InfraHub Automation"
+        chdir: "{{ repo_path }}"
+
+    - name: Gitメール設定
+      ansible.builtin.command:
+        cmd: git config user.email "automation@infrahub.test"
+        chdir: "{{ repo_path }}"
+
+    - name: コミット実行              # 変更があれば rc=0, 変更なしで rc=1
+      ansible.builtin.command:
+        cmd: git commit -m "{{ commit_message }}"
+        chdir: "{{ repo_path }}"
+      register: commit_result
+      failed_when: commit_result.rc not in [0,1]
+
+    - name: リベース＆プル           # 最新化
+      ansible.builtin.command:
+        cmd: git pull --rebase origin "{{ branch }}"
+        chdir: "{{ repo_path }}"
+
+    - name: プッシュ実行              # GIT_TERMINAL_PROMPT=0 で認証抑制
+      ansible.builtin.command:
+        cmd: git push origin "{{ branch }}" --quiet
+        chdir: "{{ repo_path }}"
+      environment:
+        GIT_TERMINAL_PROMPT: "0"
+      register: push_result
+
+    - name: SHA取得まで待機           # ※コミット反映待ち
+      ansible.builtin.pause:
+        seconds: 3
+
+    - name: HEAD の SHA を取得       # commit_sha に格納
+      ansible.builtin.command:
+        cmd: git rev-parse HEAD
+        chdir: "{{ repo_path }}"
+      register: sha_out
+
+    - name: SHA を変数に設定         # ※後続 GraphQL で使用
+      set_fact:
+        commit_sha: "{{ sha_out.stdout }}"
+
+#----------------------------------------------------------------------------------
+# STEP3 : Infrahub 上のリポジトリを更新し、アーティファクトを再生成
+#----------------------------------------------------------------------------------
+    - name: リポジトリID を取得        # network-automation-config の ID
+      opsmill.infrahub.query_graphql:
+        query: |
+          query {
+            CoreReadOnlyRepository(name__value:"network-automation-config") {
+              edges { node { id } }
+            }
+          }
+      register: repository_id
+
+    - name: リポジトリID を変数に設定  # ※次の mutation 用
+      set_fact:
+        repository_id: "{{ repository_id.response.CoreReadOnlyRepository.edges[0].node.id }}"
+
+    - name: リポジトリを最新コミットに更新  # Git fetch via GraphQL
+      opsmill.infrahub.query_graphql:
+        query: |
+          mutation {
+            CoreReadOnlyRepositoryUpdate(
+              data: {
+                id: "{{ repository_id }}"
+                ref: { value: "{{ commit_sha }}" }
+              }
+            ) { ok object { id } }
+          }
+      register: repo_update
+
+    - name: 更新反映待ち               # ※Infrahub 側処理時間
+      ansible.builtin.pause:
+        seconds: 3
+
+    # main ブランチに戻す
+    - name: main にフェッチ           # 本番用リセット
+      opsmill.infrahub.query_graphql:
+        query: |
+          mutation {
+            CoreReadOnlyRepositoryUpdate(
+              data: {
+                id: "{{ repository_id }}"
+                ref: { value: "main" }
+              }
+            ) { ok object { id } }
+          }
+      register: main_update
+
+    - name: main 更新反映待ち
+      ansible.builtin.pause:
+        seconds: 3
+
+    - name: アーティファクト定義ID取得  # device_config 用
+      opsmill.infrahub.query_graphql:
+        query: |
+          query {
+            CoreArtifactDefinition(artifact_name__value:"device_config") {
+              edges { node { id } }
+            }
+          }
+      register: artifact_id
+
+    - name: 定義ID を変数に設定        # ※Artifact 更新用
+      set_fact:
+        definition_id: "{{ artifact_id.response.CoreArtifactDefinition.edges[0].node.id }}"
+
+    - name: Artifact 更新呼び出し      # Git→Infrahub に反映
+      opsmill.infrahub.query_graphql:
+        query: |
+          mutation {
+            CoreArtifactDefinitionUpdate(
+              data: { id: "{{ definition_id }}" }
+            ) { ok }
+          }
+      register: artifact_update

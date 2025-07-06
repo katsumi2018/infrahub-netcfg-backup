@@ -1,0 +1,32 @@
+services:
+  ansible-rulebook:
+    build:
+      context: ./build                # Dockerfile があるビルド用ディレクトリを指定
+    image: ansible-rulebook:latest    # 作成・利用するイメージ名とタグ
+    container_name: ansible-rulebook  # コンテナ名を固定して管理しやすく
+    environment:
+      - INFRAHUB_ADDRESS=http://infrahub-server:8000              # InfraHub の API エンドポイント URL
+      - INFRAHUB_API_TOKEN=44af444d-3b26-410d-9546-b758657e026c   # InfraHub にアクセスする際の認証トークン
+      - GITEA_URL=http://gitea:3000                               # Gitea リポジトリのウェブ UI URL
+      - ANSIBLE_HOST_KEY_CHECKING=False                           # Ansible の SSH ホスト鍵確認を無効化
+      - ANSIBLE_DISPLAY_SKIPPED_HOSTS=False                       # Ansible でスキップされたホストを出力しない（ログの見やすさ向上）
+    volumes:
+      - ./project:/ansible-rulebook/project:ro  # Playbook やスクリプトを読み取り専用でマウント
+    tmpfs:
+      - /tmp/repos/config         # 一時的にリポジトリをクローンする揮発領域
+      - /tmp/config               # デバイス設定ファイルを一時保存する揮発領域
+    ports:
+      - "5000:5000"               # ホストとコンテナの 5000 番ポートを接続
+    command:
+      - --inventory
+      - /ansible-rulebook/project/inventory/              # インベントリ定義ファイルのディレクトリ
+      - --rulebook
+      - /ansible-rulebook/project/rulebook_infrahub.yml   # 実行するルールブックのパス指定
+      #- --verbose                  # 詳細な実行ログを出力（デバッグ用）
+    #restart: unless-stopped       # サーバ起動時に自動再起動させる場合はコメントを外す
+    networks:
+      - inflahub_net    # 他のコンテナと同じ共有ネットワーク「inflahub_net」を使用
+      
+networks:
+  inflahub_net:       # 他のコンテナと同じ共有ネットワーク「inflahub_net」を使用
+    external: true    # 新規に inflahub_net を作成せずに、事前につくった inflahub_net を利用
