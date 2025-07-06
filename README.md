@@ -2,6 +2,7 @@
 Infrahub と Gitea と Ansible Rulebook を組みあわせて、ネットワーク機器からコンフィグ取得
 
 詳細な内容はこちらを参照してください
+
 https://qiita.com/k-maki/items/01195d26a1412f71f751
 
 
