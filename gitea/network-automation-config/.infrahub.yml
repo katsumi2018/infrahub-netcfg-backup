@@ -1,0 +1,35 @@
+artifact_definitions:
+  - name: "Device-Config"         # 生成されるArtifactの表示名
+    artifact_name: "device_config"  # 内部で使用されるアーティファクト識別子
+    content_type: "text/plain"      # コンテンツのMIMEタイプ
+    targets: "group_active-devices" # 対象デバイスグループ定義（名前）
+    transformation: "DeviceConfig"  # 適用するトランスフォーム名
+    parameters:
+      device: "name__value"        # トランスフォームに渡すパラメータ名とデータキー
+
+generator_definitions:
+  - name: "backup-config_all-device"              # ジェネレータ定義の一意な名前
+    file_path: "generators/webhook_ansible-backup_all-device.py"  # ジェネレータファイルのパス
+    targets: "group_all-bachup"                  # 実行対象グループ
+    query: all-bachup_once_query                   # 利用するクエリ名
+    parameters:
+      tag: "name__value"                         # ジェネレータに渡すタグパラメータキー
+
+  - name: "backup-config_one-device"              # 一台分バックアップ用ジェネレータ名
+    file_path: "generators/webhook_ansible-backup_one-device.py"  # ジェネレータファイルのパス
+    targets: "group_active-devices"               # 実行対象グループ
+    query: device_name_query                       # 利用するクエリ名
+    parameters:
+      device: "name__value"                      # ジェネレータに渡すデバイス名パラメータキー
+
+python_transforms:
+  - name: DeviceConfig       # トランスフォーム定義の一意な名前
+    class_name: DeviceConfig  # Pythonクラス名（transforms/device_config.py内に定義）
+    file_path: "transforms/device_config.py"  # トランスフォームを実装したファイルパス
+
+queries:
+  - name: device_name_query   # デバイス名取得用GraphQLクエリの名前
+    file_path: "queries/device_name_query.gql"  # クエリファイルへのパス
+
+  - name: all-bachup_once_query  # 全デバイス一括バックアップ用クエリの名前
+    file_path: "queries/all-bachup_once_query.gql"  # クエリファイルへのパス
